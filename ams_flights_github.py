@@ -6,7 +6,7 @@ from pathlib import Path
 from fast_flights import FlightQuery, Passengers, create_query, get_flights
 
 ORIGIN = "AMS"
-PRICE_CAP = 200
+PRICE_CAP = 250
 DEFAULT_MAX_TRIP_DAYS = 3
 ICELAND_TRIP_DAYS = {4, 5}
 ALLOWED_DEPARTURE_WEEKDAYS = {1, 3, 4, 5, 6}  # Tue Thu Fri Sat Sun (Python Mon=0)
@@ -43,7 +43,7 @@ def daterange(start: date, end: date):
 def allowed_trip_lengths(dest: dict):
     if "trip_days_set" in dest:
         return sorted(dest["trip_days_set"])
-    return list(range(1, dest.get("max_trip_days", DEFAULT_MAX_TRIP_DAYS) + 1))
+    return list(range(3, dest.get("max_trip_days", DEFAULT_MAX_TRIP_DAYS) + 1))
 
 
 def should_use_departure(d: date):
