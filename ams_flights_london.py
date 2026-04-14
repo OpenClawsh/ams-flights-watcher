@@ -8,6 +8,7 @@ from fast_flights import FlightQuery, Passengers, create_query, get_flights
 ORIGIN = "AMS"
 PRICE_CAP = 250
 LONDON_CODES = ["LHR", "LGW", "STN", "LTN"]
+AIRPORT_PRIORITY = {"LHR": 0, "LGW": 1, "LCY": 2, "STN": 3, "LTN": 4}
 LONDON_WINDOW_START = date(2026, 6, 10)
 LONDON_WINDOW_END = date(2026, 6, 18)
 
@@ -37,9 +38,9 @@ def main():
                     if cheapest.price > PRICE_CAP: continue
                     results.append({"code": code, "name": "London", "departure_date": dep.isoformat(),
                                     "return_date": ret.isoformat(), "trip_days": trip_days, "price": cheapest.price,
-                                    "airlines": cheapest.airlines})
+                                    "airlines": cheapest.airlines, "airport_priority": AIRPORT_PRIORITY.get(code, 99)})
                 except Exception: continue
-    results.sort(key=lambda x: x["price"])
+    results.sort(key=lambda x: (x["airport_priority"], x["price"], -x["trip_days"]))
     Path("results").mkdir(exist_ok=True)
     out = {"generated_at": datetime.utcnow().isoformat() + "Z", "origin": ORIGIN, "search_type": "london_vct",
            "event": "VCT Masters London", "window": {"start": LONDON_WINDOW_START.isoformat(), "end": LONDON_WINDOW_END.isoformat()},
