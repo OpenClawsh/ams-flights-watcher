@@ -13,8 +13,13 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: "3.11"
-    - run: pip install fast-flights requests
-    - run: python ams_flights_github.py scan europe --days 3
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install fast-flights==3.0rc1
+        pip install requests
+    - name: Run flight scan
+      run: python ams_flights_github.py scan europe --days 3
     - uses: actions/upload-artifact@v4
       with:
         name: flight-results
