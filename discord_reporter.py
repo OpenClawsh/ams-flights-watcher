@@ -48,21 +48,19 @@ def format_general_results(data):
         return "🔍 No general flight deals found today."
     
     lines = [
-        "## ✈️ AMS Flight Deals (General)",
-        f"*Updated: {data['generated_at'][:10]}*",
-        "",
-        "| Destination | Dates | Days | Price | Airlines |",
-        "|-------------|-------|------|-------|----------|"
+        "✈️ AMS Flight Deals (General)",
+        f"Updated: {data['generated_at'][:10]}",
+        ""
     ]
     
     for r in data["results"][:10]:
-        dep = r["departure_date"][5:]  # MM-DD
+        dep = r["departure_date"][5:]
         ret = r["return_date"][5:]
         airlines = ", ".join(r["airlines"][:2])
-        lines.append(f"| {r['name']} ({r['code']}) | {dep} → {ret} | {r['trip_days']} | €{r['price']} | {airlines} |")
+        lines.append(f"• {r['name']} ({r['code']}): {dep} → {ret}, {r['trip_days']} days, €{r['price']}, {airlines}")
     
     lines.append("")
-    lines.append(f"*Constraints: Nonstop, round-trip, €{data['constraints']['price_cap_eur']} max, 3+ days, back by Tue*")
+    lines.append(f"Constraints: Nonstop, round-trip, €{data['constraints']['price_cap_eur']} max, 3+ days, back by Tue")
     
     return "\n".join(lines)
 
@@ -73,21 +71,19 @@ def format_london_results(data):
     
     window = data.get("window", {})
     lines = [
-        "## 🎮 VCT Masters London - Special Search",
-        f"*Window: {window.get('start', 'N/A')} to {window.get('end', 'N/A')}*",
-        "",
-        "| Airport | Dates | Days | Price | Airlines |",
-        "|---------|-------|------|-------|----------|"
+        "🎮 VCT Masters London - Special Search",
+        f"Window: {window.get('start', 'N/A')} to {window.get('end', 'N/A')}",
+        ""
     ]
     
     for r in data["results"][:10]:
         dep = r["departure_date"][5:]
         ret = r["return_date"][5:]
         airlines = ", ".join(r["airlines"][:2])
-        lines.append(f"| {r['code']} | {dep} → {ret} | {r['trip_days']} | €{r['price']} | {airlines} |")
+        lines.append(f"• {r['code']}: {dep} → {ret}, {r['trip_days']} days, €{r['price']}, {airlines}")
     
     lines.append("")
-    lines.append("*Book soon - VCT Masters London is popular!*")
+    lines.append("Book soon, VCT Masters London is popular.")
     
     return "\n".join(lines)
 
@@ -97,6 +93,7 @@ def send_to_discord(message):
     # The channel ID is: 1493425182961041558
     print(f"DISCORD_MESSAGE_TO_{DISCORD_CHANNEL}:")
     print(message)
+    print("\nNOTE: this script still only prints the Discord payload. It does not send it by itself.")
     return True
 
 def main():

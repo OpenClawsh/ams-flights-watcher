@@ -24,7 +24,7 @@ def build_query(dest_code: str, dep: date, ret: date):
 def main():
     results = []
     for dep in [LONDON_WINDOW_START + timedelta(days=i) for i in range((LONDON_WINDOW_END - LONDON_WINDOW_START).days + 1)]:
-        for trip_days in range(2, 5):
+        for trip_days in range(3, 5):
             ret = dep + timedelta(days=trip_days)
             if ret > LONDON_WINDOW_END + timedelta(days=3): continue
             for code in LONDON_CODES:
