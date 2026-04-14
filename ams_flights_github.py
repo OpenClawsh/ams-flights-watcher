@@ -1,119 +1,157 @@
 #!/usr/bin/env python3
-"""
-AMS Flights - GitHub Actions Version (Runs on US servers, no consent wall!)
-"""
-
-import os
-import sys
 import json
-import time
-from datetime import datetime, timedelta
+from datetime import date, timedelta, datetime
 from pathlib import Path
 
-try:
-    from fast_flights import FlightQuery, Passengers, create_query, get_flights
-    FAST_FLIGHTS_AVAILABLE = True
-except ImportError:
-    FAST_FLIGHTS_AVAILABLE = False
-    print("❌ fast_flights not installed")
-    sys.exit(1)
+from fast_flights import FlightQuery, Passengers, create_query, get_flights
 
-def scan_deals(region="europe", days=3):
-    """Scan multiple destinations for deals."""
-    destinations = {
-        "europe": [
-            ("LHR", "London"), ("CDG", "Paris"), ("FCO", "Rome"), 
-            ("BCN", "Barcelona"), ("MUC", "Munich"), ("VIE", "Vienna"),
-            ("ZRH", "Zurich"), ("CPH", "Copenhagen"), ("DUB", "Dublin"),
-            ("LIS", "Lisbon"), ("ATH", "Athens"), ("IST", "Istanbul"),
-            ("PRG", "Prague"), ("BUD", "Budapest"), ("WAW", "Warsaw"),
-            ("AMS", "Amsterdam"), ("BRU", "Brussels"), ("TXL", "Berlin"),
-            ("MAD", "Madrid"), ("OSL", "Oslo"), ("ARN", "Stockholm"),
+ORIGIN = "AMS"
+PRICE_CAP = 200
+DEFAULT_MAX_TRIP_DAYS = 3
+ICELAND_TRIP_DAYS = {4, 5}
+ALLOWED_DEPARTURE_WEEKDAYS = {1, 3, 4, 5, 6}  # Tue Thu Fri Sat Sun (Python Mon=0)
+
+DESTINATIONS = [
+    {"code": "LON", "name": "London", "priority": 100, "max_trip_days": 3, "special_window": (date(2026, 6, 20), date(2026, 6, 23))},
+    {"code": "KEF", "name": "Reykjavik", "priority": 95, "trip_days_set": {4, 5}},
+    {"code": "BCN", "name": "Barcelona", "priority": 80, "max_trip_days": 3},
+    {"code": "ATH", "name": "Athens", "priority": 78, "max_trip_days": 3},
+    {"code": "CPH", "name": "Copenhagen", "priority": 76, "max_trip_days": 3},
+    {"code": "DUB", "name": "Dublin", "priority": 75, "max_trip_days": 3},
+    {"code": "LIS", "name": "Lisbon", "priority": 74, "max_trip_days": 3},
+    {"code": "OSL", "name": "Oslo", "priority": 72, "max_trip_days": 3},
+    {"code": "ARN", "name": "Stockholm", "priority": 70, "max_trip_days": 3},
+    {"code": "MAD", "name": "Madrid", "priority": 68, "max_trip_days": 3},
+    {"code": "PRG", "name": "Prague", "priority": 66, "max_trip_days": 3},
+    {"code": "BUD", "name": "Budapest", "priority": 64, "max_trip_days": 3},
+    {"code": "VIE", "name": "Vienna", "priority": 62, "max_trip_days": 3},
+    {"code": "ZRH", "name": "Zurich", "priority": 60, "max_trip_days": 3},
+    {"code": "MUC", "name": "Munich", "priority": 58, "max_trip_days": 3},
+    {"code": "IST", "name": "Istanbul", "priority": 56, "max_trip_days": 3},
+    {"code": "FCO", "name": "Rome", "priority": 45, "max_trip_days": 3},
+    {"code": "CDG", "name": "Paris", "priority": 5, "max_trip_days": 3},
+]
+
+
+def daterange(start: date, end: date):
+    d = start
+    while d <= end:
+        yield d
+        d += timedelta(days=1)
+
+
+def allowed_trip_lengths(dest: dict):
+    if "trip_days_set" in dest:
+        return sorted(dest["trip_days_set"])
+    return list(range(1, dest.get("max_trip_days", DEFAULT_MAX_TRIP_DAYS) + 1))
+
+
+def should_use_departure(d: date):
+    return d.weekday() in ALLOWED_DEPARTURE_WEEKDAYS
+
+
+def return_within_tuesday(dep: date, ret: date):
+    return ret.weekday() <= 1 or ret.weekday() == 0  # Mon/Tue
+
+
+def build_query(dest_code: str, dep: date, ret: date):
+    return create_query(
+        flights=[
+            FlightQuery(date=dep.isoformat(), from_airport=ORIGIN, to_airport=dest_code, max_stops=0),
+            FlightQuery(date=ret.isoformat(), from_airport=dest_code, to_airport=ORIGIN, max_stops=0),
         ],
-        "long": [
-            ("JFK", "NYC"), ("LAX", "Los Angeles"), ("SFO", "San Francisco"),
-            ("MIA", "Miami"), ("ORD", "Chicago"), ("YYZ", "Toronto"),
-            ("DXB", "Dubai"), ("SIN", "Singapore"), ("BKK", "Bangkok"),
-            ("HKG", "Hong Kong"), ("NRT", "Tokyo"), ("ICN", "Seoul"),
-            ("SYD", "Sydney"), ("CPT", "Cape Town"), ("JNB", "Johannesburg"),
-        ]
-    }.get(region, [])
-    
-    dates = [(datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
-    
-    print(f"🔍 Scanning {region} destinations from AMS...")
-    print(f"Running on: {os.uname().nodename}")
-    print()
-    
-    deals = []
-    
-    for code, name in destinations:
-        print(f"Checking {name} ({code})...", end=' ', flush=True)
-        
-        for date in dates:
+        seat="economy",
+        trip="round-trip",
+        passengers=Passengers(adults=1),
+        language="en-US",
+        currency="EUR",
+    )
+
+
+def get_best_roundtrip(dest: dict, search_start: date, search_end: date):
+    best = None
+
+    special_window = dest.get("special_window")
+    if special_window:
+        dep_start, dep_end = special_window
+        candidate_departures = list(daterange(dep_start, dep_end))
+    else:
+        candidate_departures = list(daterange(search_start, search_end))
+
+    for dep in candidate_departures:
+        if not should_use_departure(dep):
+            continue
+
+        for trip_days in allowed_trip_lengths(dest):
+            ret = dep + timedelta(days=trip_days)
+            if ret > search_end + timedelta(days=7):
+                continue
+            if not return_within_tuesday(dep, ret):
+                continue
+
             try:
-                q = create_query(
-                    flights=[FlightQuery(date=date, from_airport="AMS", to_airport=code)],
-                    seat='economy', trip='one-way', passengers=Passengers(adults=1),
-                    language='en-US', currency='EUR',
-                )
-                
+                q = build_query(dest["code"], dep, ret)
                 results = get_flights(q)
-                
-                if results:
-                    best = min(results, key=lambda x: x.price)
-                    deals.append({
-                        "code": code, "name": name, "date": date,
-                        "price": best.price, "airlines": best.airlines
-                    })
-                    print(f"€{best.price} ✓")
-                    break
-                else:
-                    print("No flights")
-                    
-            except Exception as e:
-                print(f"Error: {e}")
-        
-        time.sleep(1)
-    
-    if not deals:
-        print("❌ No deals found")
-        return
-    
-    deals.sort(key=lambda x: x["price"])
-    
-    # Create results directory
-    Path("results").mkdir(exist_ok=True)
-    
-    # Save JSON
-    with open(f"results/deals_{datetime.now().strftime('%Y%m%d')}.json", 'w') as f:
-        json.dump(deals, f, indent=2)
-    
-    # Print results
-    print()
-    print("💎 Top Deals from Amsterdam:")
-    print("-" * 70)
-    print(f"{'Price':>8}  {'Code':>5}  {'Destination':<18} {'Date':<12} {'Airlines'}")
-    print("-" * 70)
-    
-    for d in deals[:20]:
-        airlines = ', '.join(d['airlines'][:2])
-        print(f"€{d['price']:>6}  {d['code']:>5}  {d['name']:<18} {d['date']:<12} {airlines}")
-    
-    print()
-    print(f"✓ Results saved to results/deals_{datetime.now().strftime('%Y%m%d')}.json")
+                if not results:
+                    continue
+
+                cheapest = min(results, key=lambda x: x.price)
+                if cheapest.price > PRICE_CAP:
+                    continue
+
+                candidate = {
+                    "code": dest["code"],
+                    "name": dest["name"],
+                    "departure_date": dep.isoformat(),
+                    "return_date": ret.isoformat(),
+                    "trip_days": trip_days,
+                    "price": cheapest.price,
+                    "airlines": cheapest.airlines,
+                    "priority": dest["priority"],
+                }
+
+                if best is None or (candidate["price"], -candidate["priority"]) < (best["price"], -best["priority"]):
+                    best = candidate
+            except Exception:
+                continue
+
+    return best
+
 
 def main():
-    import argparse
-    p = argparse.ArgumentParser(description="AMS Flights - GitHub Actions Version")
-    p.add_argument('command', choices=['scan'])
-    p.add_argument('--region', '-r', default='europe')
-    p.add_argument('--days', '-d', type=int, default=3)
-    
-    args = p.parse_args()
-    
-    if args.command == 'scan':
-        scan_deals(args.region, args.days)
+    today = date.today()
+    search_start = today
+    search_end = today + timedelta(days=90)
 
-if __name__ == '__main__':
+    results = []
+    for dest in sorted(DESTINATIONS, key=lambda x: -x["priority"]):
+        best = get_best_roundtrip(dest, search_start, search_end)
+        if best:
+            results.append(best)
+
+    results.sort(key=lambda x: (x["price"], -x["priority"]))
+
+    Path("results").mkdir(exist_ok=True)
+    out = {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "origin": ORIGIN,
+        "constraints": {
+            "nonstop_only": True,
+            "round_trip": True,
+            "price_cap_eur": PRICE_CAP,
+            "default_max_trip_days": DEFAULT_MAX_TRIP_DAYS,
+            "iceland_trip_days": sorted(ICELAND_TRIP_DAYS),
+            "allowed_departure_weekdays": ["Tue", "Thu", "Fri", "Sat", "Sun"],
+            "return_preference": "Mon/Tue",
+        },
+        "results": results,
+    }
+
+    with open("results/filtered_flights.json", "w") as f:
+        json.dump(out, f, indent=2)
+
+    print(json.dumps(out, indent=2))
+
+
+if __name__ == "__main__":
     main()
