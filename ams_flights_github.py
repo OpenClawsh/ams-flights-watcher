@@ -76,11 +76,9 @@ def get_best_roundtrip(dest: dict, search_start: date, search_end: date):
         dep_start, dep_end = special_window
         candidate_departures = list(daterange(dep_start, dep_end))
     else:
-        candidate_departures = list(daterange(search_start, search_end))
+        candidate_departures = [d for d in daterange(search_start, search_end) if d.weekday() in ALLOWED_DEPARTURE_WEEKDAYS][:12]
 
     for dep in candidate_departures:
-        if not should_use_departure(dep):
-            continue
 
         for trip_days in allowed_trip_lengths(dest):
             ret = dep + timedelta(days=trip_days)
@@ -90,6 +88,7 @@ def get_best_roundtrip(dest: dict, search_start: date, search_end: date):
                 continue
 
             try:
+                print(f"checking {dest['code']} {dep.isoformat()} -> {ret.isoformat()}", flush=True)
                 q = build_query(dest["code"], dep, ret)
                 results = get_flights(q)
                 if not results:
@@ -121,7 +120,7 @@ def get_best_roundtrip(dest: dict, search_start: date, search_end: date):
 def main():
     today = date.today()
     search_start = today
-    search_end = today + timedelta(days=90)
+    search_end = today + timedelta(days=35)
 
     results = []
     for dest in sorted(DESTINATIONS, key=lambda x: -x["priority"]):
